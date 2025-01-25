@@ -12,11 +12,19 @@
     <div class="container">
         <h1>Spelling Game</h1>
         <form action="/create-lobby" method="POST">
+            <div style="margin: 10px;">
+                <input type="text" name="playerName" placeholder="Enter Your Name" required>
+            </div>
             <button type="submit">Create New Lobby</button>
         </form>
         <hr>
         <form action="/join-lobby" method="POST">
-            <input type="text" name="lobbyId" placeholder="Enter Lobby ID" required>
+            <div style="margin: 10px;">
+                <input type="text" name="playerName" placeholder="Enter Your Name" required>
+            </div>
+            <div style="margin: 10px;">
+                <input type="text" name="lobbyId" placeholder="Enter Lobby ID" required>
+            </div>
             <button type="submit">Join Lobby</button>
         </form>
     </div>
