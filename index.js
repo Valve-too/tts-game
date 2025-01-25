@@ -18,7 +18,8 @@ const MAX_LIVES = 3;
 function getNextPlayerIndex(lobby) {
     if (!lobby.players.length) return -1;
     const currentIndex = lobby.players.findIndex(p => p.id === lobby.currentSpeller);
-    return (currentIndex + 1) % lobby.players.length;
+    lobby.turnOrder = (lobby.turnOrder + 1) % lobby.players.length;
+    return lobby.turnOrder;
 }
 
 wss.on('connection', (ws) => {
@@ -64,7 +65,9 @@ function broadcastLobbyUpdate(lobbyId) {
 function startGame(lobbyId) {
     const lobby = lobbies[lobbyId];
     if (lobby.players.length > 0) {
+        lobby.turnOrder = 0;
         lobby.currentSpeller = lobby.players[0].id;
+        broadcastLobbyUpdate(lobbyId);
         nextWord(lobbyId);
     }
 }
@@ -115,7 +118,7 @@ app.post('/create-lobby', (req, res) => {
         players: [],
         currentWord: '',
         currentSpeller: null,
-        turnOrder: 0
+        turnOrder: -1
     };
     res.redirect(`/lobby/${lobbyId}`);
 });
