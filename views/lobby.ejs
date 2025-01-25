@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Spelling Game Lobby</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .container { text-align: center; margin-top: 50px; }
+        #lobby-id { font-weight: bold; color: #333; }
+        .players-list { margin: 20px 0; }
+        .game-area { margin-top: 30px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Spelling Game Lobby</h1>
+        <p>Lobby ID: <span id="lobby-id"><%= lobbyId %></span></p>
+        
+        <div class="players-list">
+            <h3>Players:</h3>
+            <ul id="players"></ul>
+        </div>
+
+        <div class="game-area">
+            <% if (isHost) { %>
+    <button id="start-game">Start Game</button>
+<% } else { %>
+    <p>Waiting for host to start the game...</p>
+<% } %>
+            <div id="word-display" style="margin: 20px 0; font-size: 24px;"></div>
+            <input type="text" id="spelling-input" placeholder="Type the word you hear">
+            <button id="submit-spelling">Submit</button>
+        </div>
+    </div>
+
+    <script>
+        const lobbyId = '<%= lobbyId %>';
+        const playerId = Math.random().toString(36).substring(2, 8);
+        const playerName = prompt('Enter your name:') || 'Player';
+        let lastSpokenWord = '';
+        
+        // Initialize Web Speech API
+        const synth = window.speechSynthesis;
+        const utterance = new SpeechSynthesisUtterance();
+        utterance.lang = 'en-US';
+        utterance.rate = 1;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+        
+        const ws = new WebSocket(`ws://localhost:53535`);
+        
+        ws.onopen = () => {
+            ws.send(JSON.stringify({
+                type: 'join',
+                lobbyId: lobbyId,
+                playerId: playerId,
+                playerName: playerName
+            }));
+        };
+
+        ws.onmessage = (message) => {
+            const data = JSON.parse(message.data);
+            
+            switch (data.type) {
+                case 'update':
+                    updateLobby(data);
+                    break;
+            }
+        };
+
+        function updateLobby(data) {
+            // Update players list with lives and current speller indicator
+            const playersList = document.getElementById('players');
+            playersList.innerHTML = data.players
+                .map(player => {
+                    let playerText = `${player.name} (${player.lives} ❤️)`;
+                    if (player.id === data.currentSpeller) {
+                        playerText += ' - Current Speller';
+                    }
+                    return `<li>${playerText}</li>`;
+                })
+                .join('');
+            
+            // Update game interface
+            const wordDisplay = document.getElementById('word-display');
+            const spellingInput = document.getElementById('spelling-input');
+            const submitButton = document.getElementById('submit-spelling');
+            const currentSpeller = data.players.find(p => p.id === data.currentSpeller);
+
+            if (data.currentSpeller === playerId) {
+                spellingInput.disabled = false;
+                submitButton.disabled = false;
+                spellingInput.focus();
+                wordDisplay.textContent = 'Your turn! Spell the word you hear...';
+            } else {
+                spellingInput.disabled = true;
+                submitButton.disabled = true;
+                if (currentSpeller) {
+                    wordDisplay.textContent = `${currentSpeller.name}'s turn to spell...`;
+                } else {
+                    wordDisplay.textContent = 'Waiting for next turn...';
+                }
+            }
+
+            // Speak the word if it's new
+            if (data.currentWord && data.currentWord !== lastSpokenWord) {
+                utterance.text = data.currentWord;
+                synth.speak(utterance);
+                lastSpokenWord = data.currentWord;
+            }
+        }
+
+        document.getElementById('start-game').addEventListener('click', () => {
+            ws.send(JSON.stringify({
+                type: 'start',
+                lobbyId: lobbyId
+            }));
+        });
+
+        document.getElementById('submit-spelling').addEventListener('click', () => {
+            const spelling = document.getElementById('spelling-input').value;
+            ws.send(JSON.stringify({
+                type: 'submit',
+                lobbyId: lobbyId,
+                playerId: playerId,
+                spelling: spelling
+            }));
+            document.getElementById('spelling-input').value = '';
+        });
+    </script>
+</body>
+</html>

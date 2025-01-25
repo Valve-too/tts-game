@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Spelling Game</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .container { text-align: center; margin-top: 50px; }
+        button { padding: 10px 20px; font-size: 18px; margin: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Spelling Game</h1>
+        <form action="/create-lobby" method="POST">
+            <button type="submit">Create New Lobby</button>
+        </form>
+        <hr>
+        <form action="/join-lobby" method="POST">
+            <input type="text" name="lobbyId" placeholder="Enter Lobby ID" required>
+            <button type="submit">Join Lobby</button>
+        </form>
+    </div>
+</body>
+</html>
