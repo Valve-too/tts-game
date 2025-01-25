@@ -27,15 +27,18 @@
     <p>Waiting for host to start the game...</p>
 <% } %>
             <div id="word-display" style="margin: 20px 0; font-size: 24px;"></div>
-            <input type="text" id="spelling-input" placeholder="Type the word you hear">
-            <button id="submit-spelling">Submit</button>
+            <button id="repeat-word" style="margin-bottom: 10px;">Repeat Word</button>
+            <div id="spelling-controls" style="display: none;">
+                <input type="text" id="spelling-input" placeholder="Type the word you hear" style="margin-right: 5px;">
+                <button id="submit-spelling">Submit</button>
+            </div>
         </div>
     </div>
 
     <script>
         const lobbyId = '<%= lobbyId %>';
         const playerId = Math.random().toString(36).substring(2, 8);
-        const playerName = prompt('Enter your name:') || 'Player';
+        const playerName = '<%= playerName %>';
         let lastSpokenWord = '';
         
         // Initialize Web Speech API
@@ -46,28 +49,58 @@
         utterance.pitch = 1;
         utterance.volume = 1;
         
-        const ws = new WebSocket(`ws://localhost:53535`);
+        let ws;
         
-        ws.onopen = () => {
-            ws.send(JSON.stringify({
-                type: 'join',
-                lobbyId: lobbyId,
-                playerId: playerId,
-                playerName: playerName
-            }));
-        };
-
-        ws.onmessage = (message) => {
-            const data = JSON.parse(message.data);
-            
-            switch (data.type) {
-                case 'update':
-                    updateLobby(data);
-                    break;
+        function connectWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                console.log('WebSocket already connected');
+                return;
             }
-        };
+            
+            console.log('Connecting WebSocket...');
+            ws = new WebSocket(`ws://localhost:54657`);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                ws.send(JSON.stringify({
+                    type: 'join',
+                    lobbyId: lobbyId,
+                    playerId: playerId,
+                    playerName: playerName
+                }));
+            };
+            
+            ws.onmessage = (message) => {
+                try {
+                    const data = JSON.parse(message.data);
+                    
+                    switch (data.type) {
+                        case 'update':
+                            updateLobby(data);
+                            break;
+                    }
+                } catch (error) {
+                    console.error('Error processing message:', error);
+                }
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket disconnected, attempting to reconnect...');
+                document.getElementById('word-display').textContent = 'Connection lost. Reconnecting...';
+                document.getElementById('spelling-controls').style.display = 'none';
+                // Try to reconnect after a short delay
+                setTimeout(connectWebSocket, 1000);
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                ws.close();  // This will trigger onclose and attempt reconnection
+            };
+        }
 
         function updateLobby(data) {
+            console.log('Updating lobby with data:', data);
+            
             // Update players list with lives and current speller indicator
             const playersList = document.getElementById('players');
             playersList.innerHTML = data.players
@@ -85,46 +118,145 @@
             const spellingInput = document.getElementById('spelling-input');
             const submitButton = document.getElementById('submit-spelling');
             const currentSpeller = data.players.find(p => p.id === data.currentSpeller);
+            const spellingControls = document.getElementById('spelling-controls');
+            
+            console.log('Current speller:', data.currentSpeller);
+            console.log('My player ID:', playerId);
+            
+            // First check if we're in the game
+            const me = data.players.find(p => p.id === playerId);
+            if (!me) {
+                console.log('I am not in the game');
+                spellingControls.style.display = 'none';
+                spellingInput.disabled = true;
+                submitButton.disabled = true;
+                wordDisplay.textContent = 'Waiting to join the game...';
+                return;
+            }
 
-            if (data.currentSpeller === playerId) {
+            // Then check if it's our turn
+            const isMyTurn = data.currentSpeller === playerId;
+            console.log('Turn check:', {
+                currentSpeller: data.currentSpeller,
+                myId: playerId,
+                isMyTurn: isMyTurn,
+                myName: me.name
+            });
+            
+            if (isMyTurn) {
+                console.log('It is my turn');
+                // Enable controls
+                spellingControls.style.display = 'block';
                 spellingInput.disabled = false;
                 submitButton.disabled = false;
+                spellingInput.value = ''; // Clear any previous input
                 spellingInput.focus();
                 wordDisplay.textContent = 'Your turn! Spell the word you hear...';
+                
+                // Notify the player
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification('Your Turn!', {
+                        body: 'It\'s your turn to spell the word!'
+                    });
+                }
             } else {
+                console.log('It is not my turn');
+                // Disable controls
+                spellingControls.style.display = 'none';
                 spellingInput.disabled = true;
                 submitButton.disabled = true;
                 if (currentSpeller) {
-                    wordDisplay.textContent = `${currentSpeller.name}'s turn to spell...`;
+                    const speller = data.players.find(p => p.id === data.currentSpeller);
+                    wordDisplay.textContent = `${speller ? speller.name : 'Unknown player'}'s turn to spell...`;
                 } else {
                     wordDisplay.textContent = 'Waiting for next turn...';
                 }
             }
 
-            // Speak the word if it's new
-            if (data.currentWord && data.currentWord !== lastSpokenWord) {
+            // Speak the word if it's new and we're in the game
+            if (data.currentWord && data.currentWord !== lastSpokenWord && me) {
+                console.log('Speaking new word:', data.currentWord);
+                // Cancel any previous speech
+                synth.cancel();
+                // Speak the new word
                 utterance.text = data.currentWord;
                 synth.speak(utterance);
                 lastSpokenWord = data.currentWord;
             }
         }
 
+        // Request notification permission and initialize WebSocket
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Page loaded');
+            
+            // Request notification permission
+            if ('Notification' in window) {
+                Notification.requestPermission();
+            }
+            
+            console.log('Connecting WebSocket...');
+            connectWebSocket();
+        });
+
         document.getElementById('start-game').addEventListener('click', () => {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                console.log('WebSocket not connected, reconnecting...');
+                connectWebSocket();
+                return;
+            }
+            
+            console.log('Starting game...');
             ws.send(JSON.stringify({
                 type: 'start',
                 lobbyId: lobbyId
             }));
         });
 
-        document.getElementById('submit-spelling').addEventListener('click', () => {
-            const spelling = document.getElementById('spelling-input').value;
+        function submitSpelling() {
+            console.log('Attempting to submit spelling...');
+            console.log('Current player ID:', playerId);
+            
+            const spellingInput = document.getElementById('spelling-input');
+            if (spellingInput.disabled) {
+                console.log('Input is disabled, cannot submit');
+                return;
+            }
+            
+            const spelling = spellingInput.value.trim();
+            if (!spelling) {
+                console.log('No spelling entered');
+                return;
+            }
+            
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                console.log('WebSocket not connected, reconnecting...');
+                connectWebSocket();
+                return;
+            }
+            
+            console.log('Sending spelling:', spelling);
             ws.send(JSON.stringify({
                 type: 'submit',
                 lobbyId: lobbyId,
                 playerId: playerId,
                 spelling: spelling
             }));
-            document.getElementById('spelling-input').value = '';
+            spellingInput.value = '';
+        }
+
+        document.getElementById('submit-spelling').addEventListener('click', submitSpelling);
+        
+        document.getElementById('spelling-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                submitSpelling();
+            }
+        });
+
+        document.getElementById('repeat-word').addEventListener('click', () => {
+            if (lastSpokenWord) {
+                utterance.text = lastSpokenWord;
+                synth.speak(utterance);
+            }
         });
     </script>
 </body>
