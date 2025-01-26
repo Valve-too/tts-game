@@ -27,10 +27,12 @@
     <p>Waiting for host to start the game...</p>
 <% } %>
             <div id="word-display" style="margin: 20px 0; font-size: 24px;"></div>
-            <button id="repeat-word" style="margin-bottom: 10px;">Repeat Word</button>
             <div id="spelling-controls" style="display: none;">
-                <input type="text" id="spelling-input" placeholder="Type the word you hear" style="margin-right: 5px;">
-                <button id="submit-spelling">Submit</button>
+                <button id="repeat-word" style="margin-bottom: 10px;">Repeat Word</button>
+                <div>
+                    <input type="text" id="spelling-input" placeholder="Type the word you hear" style="margin-right: 5px;">
+                    <button id="submit-spelling">Submit</button>
+                </div>
             </div>
         </div>
     </div>
@@ -151,12 +153,12 @@
                 submitButton.disabled = false;
                 spellingInput.value = ''; // Clear any previous input
                 spellingInput.focus();
-                wordDisplay.textContent = 'Your turn! Spell the word you hear...';
+                wordDisplay.textContent = 'Your turn! Listen carefully and spell the word...';
                 
                 // Notify the player
                 if ('Notification' in window && Notification.permission === 'granted') {
                     new Notification('Your Turn!', {
-                        body: 'It\'s your turn to spell the word!'
+                        body: 'Listen to the word and spell it!'
                     });
                 }
             } else {
@@ -167,15 +169,15 @@
                 submitButton.disabled = true;
                 if (currentSpeller) {
                     const speller = data.players.find(p => p.id === data.currentSpeller);
-                    wordDisplay.textContent = `${speller ? speller.name : 'Unknown player'}'s turn to spell...`;
+                    wordDisplay.textContent = `${speller ? speller.name : 'Unknown player'} is spelling a word...`;
                 } else {
                     wordDisplay.textContent = 'Waiting for next turn...';
                 }
             }
 
-            // Speak the word if it's new and we're in the game
-            if (data.currentWord && data.currentWord !== lastSpokenWord && me) {
-                console.log('Speaking new word:', data.currentWord);
+            // Only speak the word if it's new AND it's our turn
+            if (data.currentWord && data.currentWord !== lastSpokenWord && isMyTurn) {
+                console.log('Speaking new word to current player:', data.currentWord);
                 // Cancel any previous speech
                 synth.cancel();
                 // Speak the new word
